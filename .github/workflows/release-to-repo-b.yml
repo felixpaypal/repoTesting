@@ -1,0 +1,24 @@
+name: Release to Repo B
+
+on:
+  workflow_dispatch: # Allows you to trigger manually
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create or Update Release in Repo B
+        uses: softprops/action-gh-release@v1
+        with:
+          token: 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
+          repository: your-org-or-user/repo-b
+          tag_name: v1.0.0
+          name: Release v1.0.0
+          body: |
+            ✅ Features:
+            - First external release
+            - Stable binary included
+
+          draft: false
+          prerelease: false
