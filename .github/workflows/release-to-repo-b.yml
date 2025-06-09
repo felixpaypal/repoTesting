@@ -11,7 +11,7 @@ jobs:
       - name: Create or Update Release in Repo B
         uses: softprops/action-gh-release@v1
         with:
-          token: ${{ secrets.CROSS_REPO_SECRET }}
+          token: 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
           repository: felixcheng/testing
           tag_name: v1.0.0
           name: Release v1.0.0
