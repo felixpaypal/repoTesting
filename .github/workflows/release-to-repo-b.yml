@@ -34,9 +34,39 @@
 #           draft: false
 #           prerelease: false
 
+# name: Push Release to External Repo
+# on:
+#   workflow_dispatch:
+#   release:
+#     types: [published]
+
+# jobs:
+#   push-release:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Push to External Repository
+#         uses: softprops/action-gh-release@v1
+#         with:
+#           token: ${{ secrets.CROSS_REPO_SECRET }}
+#           repository: felixcheng/testing
+#           tag_name: ${{ github.event.release.tag_name || 'v1.0.0' }}
+#           name: ${{ github.event.release.name || 'Release v1.0.0' }}
+#           body: |
+#             ${{ github.event.release.body || 'Release notes not available' }}
+
+#             ---
+#             *Pushed from felixpaypal/repoTesting*
+#           draft: false
+#           prerelease: ${{ github.event.release.prerelease || false }}
+
 name: Push Release to External Repo
 on:
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Specific tag to push (leave empty for latest release)"
+        required: false
+        default: ""
   release:
     types: [published]
 
@@ -44,17 +74,69 @@ jobs:
   push-release:
     runs-on: ubuntu-latest
     steps:
+      - name: Get Release Information
+        id: get-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let releaseData;
+
+            // Check if triggered by release event
+            if (context.eventName === 'release') {
+              releaseData = context.payload.release;
+              console.log('Using release from event trigger');
+            } else {
+              // Manual trigger or other - get latest release or specific tag
+              const tagName = '${{ github.event.inputs.tag_name }}';
+              
+              try {
+                if (tagName && tagName.trim() !== '') {
+                  console.log(`Fetching release for tag: ${tagName}`);
+                  const response = await github.rest.repos.getReleaseByTag({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    tag: tagName
+                  });
+                  releaseData = response.data;
+                } else {
+                  console.log('Fetching latest release');
+                  const response = await github.rest.repos.getLatestRelease({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo
+                  });
+                  releaseData = response.data;
+                }
+              } catch (error) {
+                console.error('Error fetching release:', error.message);
+                throw new Error(`No release found. Please create a release first or specify a valid tag.`);
+              }
+            }
+
+            // Set outputs
+            core.setOutput('tag_name', releaseData.tag_name);
+            core.setOutput('name', releaseData.name || `Release ${releaseData.tag_name}`);
+            core.setOutput('body', releaseData.body || 'No release notes provided');
+            core.setOutput('draft', releaseData.draft || false);
+            core.setOutput('prerelease', releaseData.prerelease || false);
+
+            console.log('Release information:', {
+              tag_name: releaseData.tag_name,
+              name: releaseData.name,
+              draft: releaseData.draft,
+              prerelease: releaseData.prerelease
+            });
+
       - name: Push to External Repository
         uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.CROSS_REPO_SECRET }}
           repository: felixcheng/testing
-          tag_name: ${{ github.event.release.tag_name || 'v1.0.0' }}
-          name: ${{ github.event.release.name || 'Release v1.0.0' }}
+          tag_name: ${{ steps.get-release.outputs.tag_name }}
+          name: ${{ steps.get-release.outputs.name }}
           body: |
-            ${{ github.event.release.body || 'Release notes not available' }}
+            ${{ steps.get-release.outputs.body }}
 
             ---
-            *Pushed from felixpaypal/repoTesting*
-          draft: false
-          prerelease: ${{ github.event.release.prerelease || false }}
+            *Pushed from ${{ github.repository }}*
+          draft: ${{ steps.get-release.outputs.draft }}
+          prerelease: ${{ steps.get-release.outputs.prerelease }}
