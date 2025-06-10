@@ -47,7 +47,7 @@ jobs:
       - name: Push to External Repository
         uses: softprops/action-gh-release@v1
         with:
-          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          token: ${{ secrets.CROSS_REPO_SECRET }}
           repository: felixcheng/testing
           tag_name: ${{ github.event.release.tag_name || 'v1.0.0' }}
           name: ${{ github.event.release.name || 'Release v1.0.0' }}
