@@ -59,84 +59,104 @@
 #           draft: false
 #           prerelease: ${{ github.event.release.prerelease || false }}
 
-name: Push Release to External Repo
+name: Push Latest Release to External Repo
 on:
   workflow_dispatch:
-    inputs:
-      tag_name:
-        description: "Specific tag to push (leave empty for latest release)"
-        required: false
-        default: ""
   release:
     types: [published]
 
 jobs:
-  push-release:
+  push-latest-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Get Release Information
-        id: get-release
+      - name: Get Latest Release
+        id: get-latest
         uses: actions/github-script@v7
         with:
           script: |
             let releaseData;
 
-            // Check if triggered by release event
+            // If triggered by release event, use that release
             if (context.eventName === 'release') {
               releaseData = context.payload.release;
-              console.log('Using release from event trigger');
+              console.log('Using release from trigger event:', releaseData.tag_name);
             } else {
-              // Manual trigger or other - get latest release or specific tag
-              const tagName = '${{ github.event.inputs.tag_name }}';
-              
+              // Manual trigger - find the latest release
               try {
-                if (tagName && tagName.trim() !== '') {
-                  console.log(`Fetching release for tag: ${tagName}`);
-                  const response = await github.rest.repos.getReleaseByTag({
+                // First try to get the latest release
+                console.log('Fetching latest release...');
+                const latestResponse = await github.rest.repos.getLatestRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo
+                });
+                releaseData = latestResponse.data;
+                console.log('Found latest release:', releaseData.tag_name);
+                
+              } catch (error) {
+                if (error.status === 404) {
+                  console.log('No "latest" release found, fetching all releases...');
+                  
+                  // If no "latest" release, get all releases and pick the most recent
+                  const allReleasesResponse = await github.rest.repos.listReleases({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
-                    tag: tagName
+                    per_page: 1  // Only get the first (most recent) one
                   });
-                  releaseData = response.data;
+                  
+                  if (allReleasesResponse.data.length > 0) {
+                    releaseData = allReleasesResponse.data[0];
+                    console.log('Found most recent release:', releaseData.tag_name);
+                  } else {
+                    throw new Error('No releases found in this repository. Please create a release first.');
+                  }
                 } else {
-                  console.log('Fetching latest release');
-                  const response = await github.rest.repos.getLatestRelease({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo
-                  });
-                  releaseData = response.data;
+                  throw error;
                 }
-              } catch (error) {
-                console.error('Error fetching release:', error.message);
-                throw new Error(`No release found. Please create a release first or specify a valid tag.`);
               }
             }
+
+            // Log release details
+            console.log('Release details:', {
+              tag_name: releaseData.tag_name,
+              name: releaseData.name,
+              draft: releaseData.draft,
+              prerelease: releaseData.prerelease,
+              published_at: releaseData.published_at,
+              created_at: releaseData.created_at
+            });
 
             // Set outputs
             core.setOutput('tag_name', releaseData.tag_name);
             core.setOutput('name', releaseData.name || `Release ${releaseData.tag_name}`);
             core.setOutput('body', releaseData.body || 'No release notes provided');
-            core.setOutput('draft', releaseData.draft || false);
-            core.setOutput('prerelease', releaseData.prerelease || false);
+            core.setOutput('draft', releaseData.draft);
+            core.setOutput('prerelease', releaseData.prerelease);
+            core.setOutput('published_at', releaseData.published_at);
+            core.setOutput('html_url', releaseData.html_url);
 
-            console.log('Release information:', {
-              tag_name: releaseData.tag_name,
-              name: releaseData.name,
-              draft: releaseData.draft,
-              prerelease: releaseData.prerelease
-            });
+            return releaseData;
 
       - name: Push to External Repository
         uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.CROSS_REPO_SECRET }}
           repository: felixcheng/testing
-          tag_name: ${{ steps.get-release.outputs.tag_name }}
-          name: ${{ steps.get-release.outputs.name }}
+          tag_name: ${{ steps.get-latest.outputs.tag_name }}
+          name: ${{ steps.get-latest.outputs.name }}
           body: |
-            ${{ steps.get-release.outputs.body }}
+            ${{ steps.get-latest.outputs.body }}
 
             ---
-            *Pushed from ${{ github.repository }}*
-          draft: ${{ steps.get-release.outputs.draft }}
-          prerelease: ${{ steps.get-release.outputs.prerelease }}
+            📅 **Original Release**: ${{ steps.get-latest.outputs.published_at }}
+            🔗 **Source**: [${{ github.repository }}](${{ steps.get-latest.outputs.html_url }})
+
+            *This release was automatically pushed from ${{ github.repository }}*
+          draft: false # Always publish to external repo, even if source was draft
+          prerelease: ${{ steps.get-latest.outputs.prerelease }}
+
+      - name: Summary
+        run: |
+          echo "✅ Successfully pushed release to external repository"
+          echo "📦 Release: ${{ steps.get-latest.outputs.name }}"
+          echo "🏷️ Tag: ${{ steps.get-latest.outputs.tag_name }}"
+          echo "🎯 Target: felixcheng/testing"
