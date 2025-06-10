@@ -1,24 +1,35 @@
 name: Release to Repo B
 
 on:
-  workflow_dispatch: # Allows you to trigger manually
+  workflow_dispatch:
 
 jobs:
   release:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Create or Update Release in Repo B
+      - name: Checkout repoA
+        uses: actions/checkout@v4
+
+      - name: Get latest release info
+        id: get_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const response = await github.rest.repos.getLatestRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            core.setOutput("tag_name", response.data.tag_name);
+            core.setOutput("body", response.data.body);
+
+      - name: Create Release in repoB
         uses: softprops/action-gh-release@v1
         with:
           token: ${{ secrets.CROSS_REPO_SECRET }}
           repository: felixcheng/testing
-          tag_name: v1.0.0
-          name: Release v1.0.0
-          body: |
-            ✅ Features:
-            - First external release
-            - Stable binary included
-
+          tag_name: ${{ steps.get_release.outputs.tag_name }}
+          name: Release ${{ steps.get_release.outputs.tag_name }}
+          body: ${{ steps.get_release.outputs.body }}
           draft: false
           prerelease: false
