@@ -81,11 +81,6 @@ jobs:
           body: |
             ${{ steps.get-latest.outputs.body }}
 
-            ---
-            📅 **Original Release**: ${{ steps.get-latest.outputs.published_at }}
-            🔗 **Source**: [${{ github.repository }}](${{ steps.get-latest.outputs.html_url }})
-
-            *This release was automatically pushed from ${{ github.repository }}*
           draft: false # Always publish to external repo, even if source was draft
           prerelease: ${{ steps.get-latest.outputs.prerelease }}
 
