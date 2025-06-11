@@ -15,44 +15,40 @@ jobs:
           script: |
             let releaseData;
 
-            // If triggered by release event, use that release
-            if (context.eventName === 'release') {
-              releaseData = context.payload.release;
-              console.log('Using release from trigger event:', releaseData.tag_name);
-            } else {
-              // Manual trigger - find the latest release
-              try {
-                // First try to get the latest release
-                console.log('Fetching latest release...');
-                const latestResponse = await github.rest.repos.getLatestRelease({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo
-                });
-                releaseData = latestResponse.data;
-                console.log('Found latest release:', releaseData.tag_name);
+
+            // Manual trigger - find the latest release
+            try {
+              // First try to get the latest release
+              console.log('Fetching latest release...');
+              const latestResponse = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              releaseData = latestResponse.data;
+              console.log('Found latest release:', releaseData.tag_name);
+              
+            } catch (error) {
+              if (error.status === 404) {
+                console.log('No "latest" release found, fetching all releases...');
                 
-              } catch (error) {
-                if (error.status === 404) {
-                  console.log('No "latest" release found, fetching all releases...');
-                  
-                  // If no "latest" release, get all releases and pick the most recent
-                  const allReleasesResponse = await github.rest.repos.listReleases({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    per_page: 1  // Only get the first (most recent) one
-                  });
-                  
-                  if (allReleasesResponse.data.length > 0) {
-                    releaseData = allReleasesResponse.data[0];
-                    console.log('Found most recent release:', releaseData.tag_name);
-                  } else {
-                    throw new Error('No releases found in this repository. Please create a release first.');
-                  }
+                // If no "latest" release, get all releases and pick the most recent
+                const allReleasesResponse = await github.rest.repos.listReleases({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  per_page: 1  // Only get the first (most recent) one
+                });
+                
+                if (allReleasesResponse.data.length > 0) {
+                  releaseData = allReleasesResponse.data[0];
+                  console.log('Found most recent release:', releaseData.tag_name);
                 } else {
-                  throw error;
+                  throw new Error('No releases found in this repository. Please create a release first.');
                 }
+              } else {
+                throw error;
               }
             }
+
 
             // Log release details
             console.log('Release details:', {
