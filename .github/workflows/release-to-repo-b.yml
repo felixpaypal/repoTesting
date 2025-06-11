@@ -1,8 +1,6 @@
 name: Push Latest Release to External Repo
 on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   push-latest-release:
